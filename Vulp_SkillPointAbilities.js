@@ -36,12 +36,36 @@
     const skillPointsPerLevel = !!PluginManager.parameters('skillPointsPerLevel');
     
 
-    ////SCENES AND WINDOWS
+    ////PLUGIN COMMANDS
+    PluginManager.registerCommand('Vulp_SkillPointAbilities', 'activateSkill', (args = {}) => {
+        let { actorId, skillId } = args;
+        if (runInDevMode) {
+            console.assert(actorId && !isNaN(actorId), {args: args, errorMessage: "Invalid actor id"});
+            console.assert(skillId && !isNaN(skillId), {args: args, errorMessage: "Invalid skill id"});
+        }
 
+        actorId = parseInt(actorId);
+        skillId = parseInt(skillId);
+        const actor = $gameActors.actor(actorId);
+        actor.learnSkill(skillId);
+    });
+    
+
+    ////SCENES AND WINDOWS
+    //todo: add custom skill menu
 
 
     ////RPG MAKER OVERRIDES
     //Game_Actor
+    const initActor = Game_Actor.prototype.initMembers;
+    Game_Actor.prototype.initMembers = function() {
+        initActor.call(this);
+
+        this._skillPoints = 0;
+        this._activeSkills = [];
+        this._inactiveSkills = [];
+    };
+
     const setupActors = Game_Actor.prototype.setup;
     Game_Actor.prototype.setup = function(actorId) {
         setupActors.call(this, actorId);
@@ -59,8 +83,8 @@
     Game_Actor.prototype.initSkills = function() {
         initActorSkills.call(this);
 
-        this._activeSkills = [];
         this._inactiveSkills = [...this._skills];
+        this._activeSkills = [];
         this._skills = [];
     };
 
@@ -71,8 +95,31 @@
         this.levelUpSP();
     };
 
+    const learnSkillActor = Game_Actor.prototype.learnSkill;
+    Game_Actor.prototype.learnSkill = function(skillId) {
+        learnSkillActor.call(this, skillId);
+
+        this._inactiveSkills = this._inactiveSkills.filter((removeSkill) => { 
+            skillId !== removeSkill
+        });
+
+        if (!this._activeSkills.find((activeSkillId) => {
+            activeSkillId === skillId
+        })) {
+            this._activeSkills.push(skillId);
+        }
+    }
+
     Game_Actor.prototype.skillPoints = function() {
         return this._skillPoints;
+    };
+
+    Game_Actor.prototype.activeSkills = function() {
+        return this._activeSkills;
+    };
+
+    Game_Actor.prototype.inactiveSkills = function() {
+        return this._inactiveSkills;
     };
     
     Game_Actor.prototype.levelUpSP = function() {
@@ -82,12 +129,20 @@
 
     ////DEBUGGING AND DEV
     const runDevTests = async () => {
+        console.log($gameActors);
 
-        const tests = $dataActors.slice(1).map((dataActor) => {
+        $dataActors.slice(1).map((dataActor) => {
 
             //test actor
             const actor = $gameActors.actor(dataActor.id);
-            console.assert(actor._skillPoints, {actor: actor, errorMessage: "Skill points not setup correctly"});
+            const actorSkills = actor.skills();
+            const activeSkills = actor.activeSkills();
+            const inactiveSkills = actor.inactiveSkills();
+
+            console.assert(actor.skillPoints(), {actor: actor, errorMessage: "Skill points not set up correctly"});
+            console.assert(actorSkills.length === 0, {actor: actor, errorMessage: "Skills not set up correctly"});
+            console.assert(activeSkills.length === 0, {actor: actor, errorMessage: "Active Skills not set up correctly"});
+            console.assert(inactiveSkills, {actor: actor, errorMessage: "Inactive Skills not set up correctly"});
             
             //test actor metadata
             let initialSP = skillPointsPerLevel;
@@ -105,11 +160,12 @@
                 errorMessage: "Skill points not leveling up properly"
             });
 
-            //test skills
-            // $data
+            //test skill activation
+            
         });
     };
 
+    //run tests
     if (runInDevMode) {
         const startBootScene = Scene_Boot.prototype.start;
         Scene_Boot.prototype.start = function() {
