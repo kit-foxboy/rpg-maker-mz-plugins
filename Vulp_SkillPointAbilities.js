@@ -15,8 +15,18 @@
  * @default 1
  * 
  * @command activateSkill
- * @text Activates an actor's skill
+ * @text Activate an actor's skill
  * @desc Activate a currently inactive skill for the actor
+ * 
+ * @arg actorId
+ * @type actor
+ * 
+ * @arg skillId
+ * @type skill
+ * 
+ * @command deactivateSkill
+ * @text Deactivate an actor's skill
+ * @desc Deactivate a currently active skill for the actor
  * 
  * @arg actorId
  * @type actor
@@ -48,6 +58,19 @@
         skillId = parseInt(skillId);
         const actor = $gameActors.actor(actorId);
         actor.learnSkill(skillId);
+    });
+
+    PluginManager.registerCommand('Vulp_SkillPointAbilities', 'deactivateSkill', (args = {}) => {
+        let { actorId, skillId } = args;
+        if (runInDevMode) {
+            console.assert(actorId && !isNaN(actorId), {args: args, errorMessage: "Invalid actor id"});
+            console.assert(skillId && !isNaN(skillId), {args: args, errorMessage: "Invalid skill id"});
+        }
+
+        actorId = parseInt(actorId);
+        skillId = parseInt(skillId);
+        const actor = $gameActors.actor(actorId);
+        actor.forgetSkill(skillId);
     });
     
 
@@ -83,6 +106,7 @@
     Game_Actor.prototype.initSkills = function() {
         initActorSkills.call(this);
 
+        //make skills inactive by default
         this._inactiveSkills = [...this._skills];
         this._activeSkills = [];
         this._skills = [];
@@ -99,16 +123,10 @@
     Game_Actor.prototype.learnSkill = function(skillId) {
         learnSkillActor.call(this, skillId);
 
-        this._inactiveSkills = this._inactiveSkills.filter((removeSkill) => { 
-            skillId !== removeSkill
-        });
-
-        if (!this._activeSkills.find((activeSkillId) => {
-            activeSkillId === skillId
-        })) {
-            this._activeSkills.push(skillId);
-        }
-    }
+        this._inactiveSkills.splice(this._inactiveSkills.indexOf(skillId), 1);
+        this._activeSkills.push(skillId);
+        this._activeSkills.sort((a, b) => a - b);
+    };
 
     Game_Actor.prototype.skillPoints = function() {
         return this._skillPoints;
@@ -126,10 +144,17 @@
         this._skillPoints += skillPointsPerLevel;
     };
 
+    Game_Actor.prototype.forgetSkill = function(skillId) {
+        this._skills.splice(this._skills.indexOf(skillId), 1);
+        this._activeSkills.splice(this._activeSkills.indexOf(skillId), 1);
+        
+        this._inactiveSkills.push(skillId);
+        this._inactiveSkills.sort((a, b) => a - b);
+    }
+
 
     ////DEBUGGING AND DEV
     const runDevTests = async () => {
-        console.log($gameActors);
 
         $dataActors.slice(1).map((dataActor) => {
 
@@ -161,7 +186,13 @@
             });
 
             //test skill activation
-            
+            actor.learnSkill(1);
+            console.assert(actor.activeSkills().find((skillId) => skillId === 1), {actor: actor, errorMessage: "Activating skills not working correctly"});
+            console.assert(!actor.inactiveSkills().find((skillId) => skillId === 1), {actor: actor, errorMessage: "Activating skills not working correctly"});
+        
+            actor.forgetSkill(1);
+            console.assert(actor.inactiveSkills().find((skillId) => skillId === 1), {actor: actor, errorMessage: "Deactivating skills not working correctly"});
+            console.assert(!actor.activeSkills().find((skillId) => skillId === 1), {actor: actor, errorMessage: "Deactivating skills not working correctly"});
         });
     };
 
